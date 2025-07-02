@@ -120,7 +120,7 @@ contract AirswapMinter {
      * @param tokenId The token ID to mint
      * @notice User must have 1010 sAST tokens and not have minted before
      */
-    function mintNFT(uint256 tokenId) external {
+    function mintNFT() external {
         // Check if user has already minted
         if (hasMinted[msg.sender]) {
             revert AlreadyMinted();
@@ -137,9 +137,9 @@ contract AirswapMinter {
         totalMinted++;
 
         // Mint the NFT to the user
-        nftContract.mint(msg.sender, tokenId, 1, "");
+        nftContract.mint(msg.sender, 0, 1, "");
 
-        emit NFTMinted(msg.sender, tokenId);
+        emit NFTMinted(msg.sender, 0);
     }
 
     /**
