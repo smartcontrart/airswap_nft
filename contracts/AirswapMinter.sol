@@ -249,7 +249,7 @@ contract AirswapMinter {
      * @return The required balance divided by 10^18
      */
     function getRequiredBalanceInTokens() external view returns (uint256) {
-        return requiredSASTBalance / 10 ** 18;
+        return requiredSASTBalance / 10 ** 4;
     }
 }
 
