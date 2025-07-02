@@ -97,7 +97,7 @@ contract AirswapMinter {
 
         nftContract = IAirswapNFT(_nftContract);
         sastToken = _sastToken;
-        requiredSASTBalance = 1010 * 10 ** 18; // 1010 tokens with 18 decimals
+        requiredSASTBalance = 1010 * 10 ** 4;
         owner = msg.sender;
     }
 
