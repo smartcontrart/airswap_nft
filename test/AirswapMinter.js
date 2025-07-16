@@ -36,7 +36,9 @@ describe("AirswapMinter", function () {
       expect(await minter.sastToken()).to.equal(sastToken.target);
       expect(await minter.owner()).to.equal(owner.address);
       expect(await minter.totalMinted()).to.equal(0);
-      expect(await minter.getRequiredBalanceInTokens()).to.equal(1010);
+      expect(await minter.requiredSASTBalance()).to.equal(1010n * 10n ** 4n);
+      expect(await minter.mintableTokenId()).to.equal(0);
+      expect(await minter.mintQuantity()).to.equal(1);
     });
 
     it("Should revert if deploying with zero addresses", async function () {
@@ -77,13 +79,13 @@ describe("AirswapMinter", function () {
         expect(await minter.canMint(user1.address)).to.be.true;
 
         // Mint NFT
-        await expect(minter.connect(user1).mintNFT(tokenId))
+        await expect(minter.connect(user1).mintNFT())
           .to.emit(minter, "NFTMinted")
-          .withArgs(user1.address, tokenId);
+          .withArgs(user1.address, 0, 1);
 
         // Verify NFT was minted
-        expect(await nft.balanceOf(user1.address, tokenId)).to.equal(1);
-        expect(await nft.tokenExists(tokenId)).to.be.true;
+        expect(await nft.balanceOf(user1.address, 0)).to.equal(1);
+        expect(await nft.tokenExists(0)).to.be.true;
 
         // Verify user is marked as having minted
         expect(await minter.hasMinted(user1.address)).to.be.true;
@@ -100,13 +102,13 @@ describe("AirswapMinter", function () {
         await sastToken.mint(user1.address, requiredBalance);
         await sastToken.mint(user2.address, requiredBalance);
 
-        // User1 mints token 1
-        await minter.connect(user1).mintNFT(1);
-        expect(await nft.balanceOf(user1.address, 1)).to.equal(1);
+        // User1 mints token 0
+        await minter.connect(user1).mintNFT();
+        expect(await nft.balanceOf(user1.address, 0)).to.equal(1);
 
-        // User2 mints token 2
-        await minter.connect(user2).mintNFT(2);
-        expect(await nft.balanceOf(user2.address, 2)).to.equal(1);
+        // User2 mints token 0 (same token ID for all users)
+        await minter.connect(user2).mintNFT();
+        expect(await nft.balanceOf(user2.address, 0)).to.equal(1);
 
         // Verify total minted
         expect(await minter.totalMinted()).to.equal(2);
@@ -124,11 +126,11 @@ describe("AirswapMinter", function () {
         await sastToken.mint(user1.address, requiredBalance);
 
         // First mint should succeed
-        await minter.connect(user1).mintNFT(1);
+        await minter.connect(user1).mintNFT();
 
         // Second mint should fail
         await expect(
-          minter.connect(user1).mintNFT(2)
+          minter.connect(user1).mintNFT()
         ).to.be.revertedWithCustomError(minter, "AlreadyMinted");
       });
 
@@ -139,14 +141,14 @@ describe("AirswapMinter", function () {
         const requiredBalance = await minter.requiredSASTBalance();
 
         // Give user1 insufficient sAST balance (1000 instead of 1010)
-        await sastToken.mint(user1.address, 1000n * 10n ** 18n);
+        await sastToken.mint(user1.address, 1000n * 10n ** 4n);
 
         // Check user cannot mint
         expect(await minter.canMint(user1.address)).to.be.false;
 
         // Mint should fail
         await expect(
-          minter.connect(user1).mintNFT(1)
+          minter.connect(user1).mintNFT()
         ).to.be.revertedWithCustomError(minter, "InsufficientSASTBalance");
       });
 
@@ -158,7 +160,7 @@ describe("AirswapMinter", function () {
 
         // Mint should fail
         await expect(
-          minter.connect(user1).mintNFT(1)
+          minter.connect(user1).mintNFT()
         ).to.be.revertedWithCustomError(minter, "InsufficientSASTBalance");
       });
     });
@@ -174,9 +176,9 @@ describe("AirswapMinter", function () {
         await sastToken.mint(user1.address, requiredBalance);
 
         // Mint should succeed
-        await expect(minter.connect(user1).mintNFT(1))
+        await expect(minter.connect(user1).mintNFT())
           .to.emit(minter, "NFTMinted")
-          .withArgs(user1.address, 1);
+          .withArgs(user1.address, 0, 1);
       });
 
       it("Should handle minting with more than required balance", async function () {
@@ -188,16 +190,16 @@ describe("AirswapMinter", function () {
         // Give user1 more than the required sAST balance
         await sastToken.mint(
           user1.address,
-          requiredBalance + 1000n * 10n ** 18n
+          requiredBalance + 1000n * 10n ** 4n
         );
 
         // Mint should succeed
-        await expect(minter.connect(user1).mintNFT(1))
+        await expect(minter.connect(user1).mintNFT())
           .to.emit(minter, "NFTMinted")
-          .withArgs(user1.address, 1);
+          .withArgs(user1.address, 0, 1);
       });
 
-      it("Should handle minting token ID 0", async function () {
+      it("Should handle minting the configured token ID", async function () {
         const { sastToken, minter, user1 } = await loadFixture(
           deployMinterFixture
         );
@@ -205,23 +207,22 @@ describe("AirswapMinter", function () {
 
         await sastToken.mint(user1.address, requiredBalance);
 
-        await expect(minter.connect(user1).mintNFT(0))
+        await expect(minter.connect(user1).mintNFT())
           .to.emit(minter, "NFTMinted")
-          .withArgs(user1.address, 0);
+          .withArgs(user1.address, 0, 1);
       });
 
-      it("Should handle minting large token IDs", async function () {
+      it("Should handle minting with different configured token ID", async function () {
         const { sastToken, minter, user1 } = await loadFixture(
           deployMinterFixture
         );
         const requiredBalance = await minter.requiredSASTBalance();
-        const largeTokenId = ethers.MaxUint256;
 
         await sastToken.mint(user1.address, requiredBalance);
 
-        await expect(minter.connect(user1).mintNFT(largeTokenId))
+        await expect(minter.connect(user1).mintNFT())
           .to.emit(minter, "NFTMinted")
-          .withArgs(user1.address, largeTokenId);
+          .withArgs(user1.address, 0, 1);
       });
     });
   });
@@ -238,21 +239,20 @@ describe("AirswapMinter", function () {
       await sastToken.mint(user3.address, requiredBalance);
 
       const users = [user1.address, user2.address, user3.address];
-      const tokenIds = [1, 2, 3];
 
       // Batch mint
-      await expect(minter.connect(owner).batchMintNFTs(users, tokenIds))
+      await expect(minter.connect(owner).batchMintNFTs(users))
         .to.emit(minter, "NFTMinted")
-        .withArgs(user1.address, 1)
+        .withArgs(user1.address, 0, 1)
         .to.emit(minter, "NFTMinted")
-        .withArgs(user2.address, 2)
+        .withArgs(user2.address, 0, 1)
         .to.emit(minter, "NFTMinted")
-        .withArgs(user3.address, 3);
+        .withArgs(user3.address, 0, 1);
 
       // Verify NFTs were minted
-      expect(await nft.balanceOf(user1.address, 1)).to.equal(1);
-      expect(await nft.balanceOf(user2.address, 2)).to.equal(1);
-      expect(await nft.balanceOf(user3.address, 3)).to.equal(1);
+      expect(await nft.balanceOf(user1.address, 0)).to.equal(1);
+      expect(await nft.balanceOf(user2.address, 0)).to.equal(1);
+      expect(await nft.balanceOf(user3.address, 0)).to.equal(1);
 
       // Verify total minted
       expect(await minter.totalMinted()).to.equal(3);
@@ -269,15 +269,14 @@ describe("AirswapMinter", function () {
       await sastToken.mint(user2.address, requiredBalance);
 
       // User1 mints individually first
-      await minter.connect(user1).mintNFT(1);
+      await minter.connect(user1).mintNFT();
 
       const users = [user1.address, user2.address];
-      const tokenIds = [10, 20];
 
       // Batch mint - should skip user1, mint for user2
-      await expect(minter.connect(owner).batchMintNFTs(users, tokenIds))
+      await expect(minter.connect(owner).batchMintNFTs(users))
         .to.emit(minter, "NFTMinted")
-        .withArgs(user2.address, 20);
+        .withArgs(user2.address, 0, 1);
 
       // Verify only user2 got the new NFT
       expect(await minter.hasMinted(user1.address)).to.be.true;
@@ -289,22 +288,10 @@ describe("AirswapMinter", function () {
       const { minter, user1 } = await loadFixture(deployMinterFixture);
 
       const users = [user1.address];
-      const tokenIds = [1];
 
       await expect(
-        minter.connect(user1).batchMintNFTs(users, tokenIds)
+        minter.connect(user1).batchMintNFTs(users)
       ).to.be.revertedWithCustomError(minter, "Unauthorized");
-    });
-
-    it("Should revert if arrays have different lengths", async function () {
-      const { minter, owner, user1 } = await loadFixture(deployMinterFixture);
-
-      const users = [user1.address, user1.address];
-      const tokenIds = [1];
-
-      await expect(
-        minter.connect(owner).batchMintNFTs(users, tokenIds)
-      ).to.be.revertedWith("Arrays length mismatch");
     });
   });
 
@@ -341,21 +328,20 @@ describe("AirswapMinter", function () {
     describe("Required Balance Management", function () {
       it("Should allow owner to update required balance", async function () {
         const { minter, owner } = await loadFixture(deployMinterFixture);
-        const newBalance = 2000n * 10n ** 18n;
+        const newBalance = 2000n * 10n ** 4n;
 
         await expect(minter.connect(owner).updateRequiredBalance(newBalance))
           .to.emit(minter, "RequiredBalanceUpdated")
           .withArgs(await minter.requiredSASTBalance(), newBalance);
 
         expect(await minter.requiredSASTBalance()).to.equal(newBalance);
-        expect(await minter.getRequiredBalanceInTokens()).to.equal(2000);
       });
 
       it("Should revert if non-owner tries to update required balance", async function () {
         const { minter, user1 } = await loadFixture(deployMinterFixture);
 
         await expect(
-          minter.connect(user1).updateRequiredBalance(2000n * 10n ** 18n)
+          minter.connect(user1).updateRequiredBalance(2000n * 10n ** 4n)
         ).to.be.revertedWithCustomError(minter, "Unauthorized");
       });
     });
@@ -385,6 +371,56 @@ describe("AirswapMinter", function () {
         ).to.be.revertedWithCustomError(minter, "InvalidTokenAddress");
       });
     });
+
+    describe("Mintable Token ID Management", function () {
+      it("Should allow owner to update mintable token ID", async function () {
+        const { minter, owner } = await loadFixture(deployMinterFixture);
+        const newTokenId = 5;
+
+        await expect(minter.connect(owner).updateMintableTokenId(newTokenId))
+          .to.emit(minter, "MintableTokenIdUpdated")
+          .withArgs(0, newTokenId);
+
+        expect(await minter.mintableTokenId()).to.equal(newTokenId);
+      });
+
+      it("Should revert if non-owner tries to update mintable token ID", async function () {
+        const { minter, user1 } = await loadFixture(deployMinterFixture);
+
+        await expect(
+          minter.connect(user1).updateMintableTokenId(5)
+        ).to.be.revertedWithCustomError(minter, "Unauthorized");
+      });
+    });
+
+    describe("Mint Quantity Management", function () {
+      it("Should allow owner to update mint quantity", async function () {
+        const { minter, owner } = await loadFixture(deployMinterFixture);
+        const newQuantity = 3;
+
+        await expect(minter.connect(owner).updateMintQuantity(newQuantity))
+          .to.emit(minter, "MintQuantityUpdated")
+          .withArgs(1, newQuantity);
+
+        expect(await minter.mintQuantity()).to.equal(newQuantity);
+      });
+
+      it("Should revert if non-owner tries to update mint quantity", async function () {
+        const { minter, user1 } = await loadFixture(deployMinterFixture);
+
+        await expect(
+          minter.connect(user1).updateMintQuantity(3)
+        ).to.be.revertedWithCustomError(minter, "Unauthorized");
+      });
+
+      it("Should revert if trying to set zero mint quantity", async function () {
+        const { minter, owner } = await loadFixture(deployMinterFixture);
+
+        await expect(
+          minter.connect(owner).updateMintQuantity(0)
+        ).to.be.revertedWithCustomError(minter, "InvalidMintQuantity");
+      });
+    });
   });
 
   describe("View Functions", function () {
@@ -398,7 +434,7 @@ describe("AirswapMinter", function () {
       expect(await minter.canMint(user1.address)).to.be.false;
 
       // Give user insufficient balance
-      await sastToken.mint(user1.address, 1000n * 10n ** 18n);
+      await sastToken.mint(user1.address, 1000n * 10n ** 4n);
       expect(await minter.canMint(user1.address)).to.be.false;
 
       // Give user sufficient balance
@@ -406,7 +442,7 @@ describe("AirswapMinter", function () {
       expect(await minter.canMint(user1.address)).to.be.true;
 
       // User mints
-      await minter.connect(user1).mintNFT(1);
+      await minter.connect(user1).mintNFT();
       expect(await minter.canMint(user1.address)).to.be.false;
     });
 
@@ -414,17 +450,17 @@ describe("AirswapMinter", function () {
       const { sastToken, minter, user1 } = await loadFixture(
         deployMinterFixture
       );
-      const balance = 1000n * 10n ** 18n;
+      const balance = 1000n * 10n ** 4n;
 
       await sastToken.mint(user1.address, balance);
 
       expect(await minter.getUserSASTBalance(user1.address)).to.equal(balance);
     });
 
-    it("Should correctly get required balance in tokens", async function () {
+    it("Should correctly get required balance", async function () {
       const { minter } = await loadFixture(deployMinterFixture);
 
-      expect(await minter.getRequiredBalanceInTokens()).to.equal(1010);
+      expect(await minter.requiredSASTBalance()).to.equal(1010n * 10n ** 4n);
     });
   });
 
@@ -433,7 +469,7 @@ describe("AirswapMinter", function () {
       const { nft, sastToken, minter, owner, user1 } = await loadFixture(
         deployMinterFixture
       );
-      const newRequiredBalance = 500n * 10n ** 18n;
+      const newRequiredBalance = 500n * 10n ** 4n;
 
       // Update required balance
       await minter.connect(owner).updateRequiredBalance(newRequiredBalance);
@@ -444,9 +480,9 @@ describe("AirswapMinter", function () {
       // User should be able to mint
       expect(await minter.canMint(user1.address)).to.be.true;
 
-      await expect(minter.connect(user1).mintNFT(1))
+      await expect(minter.connect(user1).mintNFT())
         .to.emit(minter, "NFTMinted")
-        .withArgs(user1.address, 1);
+        .withArgs(user1.address, 0, 1);
     });
 
     it("Should work correctly with updated sAST token", async function () {
@@ -468,9 +504,9 @@ describe("AirswapMinter", function () {
       // User should be able to mint
       expect(await minter.canMint(user1.address)).to.be.true;
 
-      await expect(minter.connect(user1).mintNFT(1))
+      await expect(minter.connect(user1).mintNFT())
         .to.emit(minter, "NFTMinted")
-        .withArgs(user1.address, 1);
+        .withArgs(user1.address, 0, 1);
     });
   });
 });

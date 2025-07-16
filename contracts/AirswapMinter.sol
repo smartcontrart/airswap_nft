@@ -7,7 +7,7 @@ import "solady/src/utils/SafeTransferLib.sol";
 /**
  * @title AirswapMinter
  * @dev Contract that allows users to mint AirswapNFT tokens
- * @notice Users can mint 1 NFT per wallet if they have the required sAST balance
+ * @notice Users can mint a specified quantity of NFTs per wallet if they have the required sAST balance
  */
 contract AirswapMinter {
     using SafeTransferLib for address;
@@ -18,8 +18,13 @@ contract AirswapMinter {
      * @dev Emitted when a user successfully mints an NFT
      * @param user The address of the user who minted
      * @param tokenId The ID of the token that was minted
+     * @param quantity The quantity of tokens minted
      */
-    event NFTMinted(address indexed user, uint256 indexed tokenId);
+    event NFTMinted(
+        address indexed user,
+        uint256 indexed tokenId,
+        uint256 quantity
+    );
 
     /**
      * @dev Emitted when the sAST token address is updated
@@ -37,6 +42,20 @@ contract AirswapMinter {
      * @param newBalance The new required balance
      */
     event RequiredBalanceUpdated(uint256 oldBalance, uint256 newBalance);
+
+    /**
+     * @dev Emitted when the mintable token ID is updated
+     * @param oldTokenId The previous token ID
+     * @param newTokenId The new token ID
+     */
+    event MintableTokenIdUpdated(uint256 oldTokenId, uint256 newTokenId);
+
+    /**
+     * @dev Emitted when the mint quantity is updated
+     * @param oldQuantity The previous mint quantity
+     * @param newQuantity The new mint quantity
+     */
+    event MintQuantityUpdated(uint256 oldQuantity, uint256 newQuantity);
 
     // ============ ERRORS ============
 
@@ -60,6 +79,11 @@ contract AirswapMinter {
      */
     error InvalidTokenAddress();
 
+    /**
+     * @dev Error thrown when trying to set invalid mint quantity
+     */
+    error InvalidMintQuantity();
+
     // ============ STATE VARIABLES ============
 
     /// @dev The AirswapNFT contract
@@ -70,6 +94,12 @@ contract AirswapMinter {
 
     /// @dev Required sAST balance to mint (1010 tokens)
     uint256 public requiredSASTBalance;
+
+    /// @dev The token ID that can be minted through this contract
+    uint256 public mintableTokenId;
+
+    /// @dev The quantity of tokens to mint per user
+    uint256 public mintQuantity;
 
     /// @dev Mapping to track which addresses have already minted
     mapping(address => bool) public hasMinted;
@@ -94,7 +124,10 @@ contract AirswapMinter {
         if (_sastToken == address(0)) {
             revert InvalidTokenAddress();
         }
-
+        // Default tokenId to 0
+        mintableTokenId = 0;
+        // Default quantity to 1
+        mintQuantity = 1;
         nftContract = IAirswapNFT(_nftContract);
         sastToken = _sastToken;
         requiredSASTBalance = 1010 * 10 ** 4;
@@ -116,9 +149,8 @@ contract AirswapMinter {
     // ============ MINTING FUNCTIONS ============
 
     /**
-     * @dev Allows a user to mint 1 NFT if they meet the requirements
-     * @param tokenId The token ID to mint
-     * @notice User must have 1010 sAST tokens and not have minted before
+     * @dev Allows a user to mint NFTs if they meet the requirements
+     * @notice User must have sufficient sAST tokens and not have minted before
      */
     function mintNFT() external {
         // Check if user has already minted
@@ -134,29 +166,22 @@ contract AirswapMinter {
 
         // Mark user as having minted
         hasMinted[msg.sender] = true;
-        totalMinted++;
+        totalMinted += mintQuantity;
 
         // Mint the NFT to the user
-        nftContract.mint(msg.sender, 0, 1, "");
+        nftContract.mint(msg.sender, mintableTokenId, mintQuantity, "");
 
-        emit NFTMinted(msg.sender, 0);
+        emit NFTMinted(msg.sender, mintableTokenId, mintQuantity);
     }
 
     /**
      * @dev Batch mint NFTs for multiple users (admin function)
      * @param users Array of user addresses
-     * @param tokenIds Array of token IDs to mint
      * @notice Only owner can call this function
      */
-    function batchMintNFTs(
-        address[] calldata users,
-        uint256[] calldata tokenIds
-    ) external onlyOwner {
-        require(users.length == tokenIds.length, "Arrays length mismatch");
-
+    function batchMintNFTs(address[] calldata users) external onlyOwner {
         for (uint256 i = 0; i < users.length; i++) {
             address user = users[i];
-            uint256 tokenId = tokenIds[i];
 
             // Skip if user has already minted
             if (hasMinted[user]) {
@@ -165,12 +190,12 @@ contract AirswapMinter {
 
             // Mark user as having minted
             hasMinted[user] = true;
-            totalMinted++;
+            totalMinted += mintQuantity;
 
             // Mint the NFT to the user
-            nftContract.mint(user, tokenId, 1, "");
+            nftContract.mint(user, mintableTokenId, mintQuantity, "");
 
-            emit NFTMinted(user, tokenId);
+            emit NFTMinted(user, mintableTokenId, mintQuantity);
         }
     }
 
@@ -204,6 +229,36 @@ contract AirswapMinter {
         requiredSASTBalance = _requiredBalance;
 
         emit RequiredBalanceUpdated(oldBalance, _requiredBalance);
+    }
+
+    /**
+     * @dev Updates the mintable token ID
+     * @param _mintableTokenId The new token ID that can be minted
+     * @notice Only owner can call this function
+     */
+    function updateMintableTokenId(
+        uint256 _mintableTokenId
+    ) external onlyOwner {
+        uint256 oldTokenId = mintableTokenId;
+        mintableTokenId = _mintableTokenId;
+
+        emit MintableTokenIdUpdated(oldTokenId, _mintableTokenId);
+    }
+
+    /**
+     * @dev Updates the mint quantity
+     * @param _mintQuantity The new quantity of tokens to mint per user
+     * @notice Only owner can call this function
+     */
+    function updateMintQuantity(uint256 _mintQuantity) external onlyOwner {
+        if (_mintQuantity == 0) {
+            revert InvalidMintQuantity();
+        }
+
+        uint256 oldQuantity = mintQuantity;
+        mintQuantity = _mintQuantity;
+
+        emit MintQuantityUpdated(oldQuantity, _mintQuantity);
     }
 
     /**
@@ -245,11 +300,11 @@ contract AirswapMinter {
     }
 
     /**
-     * @dev Gets the required sAST balance in a more readable format
-     * @return The required balance divided by 10^18
+     * @dev Gets the total quantity of tokens minted through this contract
+     * @return The total quantity of tokens minted
      */
-    function getRequiredBalanceInTokens() external view returns (uint256) {
-        return requiredSASTBalance / 10 ** 4;
+    function getTotalTokensMinted() external view returns (uint256) {
+        return totalMinted;
     }
 }
 

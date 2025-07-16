@@ -5,7 +5,7 @@ import "solady/src/tokens/ERC20.sol";
 
 /**
  * @title MockERC20
- * @dev Mock ERC20 token for testing purposes
+ * @dev Mock ERC20 token for testing purposes with 4 decimals
  */
 contract MockERC20 is ERC20 {
     constructor() ERC20() {}
@@ -20,5 +20,9 @@ contract MockERC20 is ERC20 {
 
     function symbol() public view virtual override returns (string memory) {
         return "MOCK";
+    }
+
+    function decimals() public view virtual override returns (uint8) {
+        return 4;
     }
 }
