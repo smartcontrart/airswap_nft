@@ -101,8 +101,8 @@ contract AirswapMinter {
     /// @dev The quantity of tokens to mint per user
     uint256 public mintQuantity;
 
-    /// @dev Mapping to track which addresses have already minted
-    mapping(address => bool) public hasMinted;
+    /// @dev Mapping to track which addresses have already minted specific token IDs
+    mapping(address => mapping(uint256 => bool)) public hasMinted;
 
     /// @dev Owner of the contract (can update settings)
     address public owner;
@@ -154,7 +154,7 @@ contract AirswapMinter {
      */
     function mintNFT() external {
         // Check if user has already minted
-        if (hasMinted[msg.sender]) {
+        if (hasMinted[msg.sender][mintableTokenId]) {
             revert AlreadyMinted();
         }
 
@@ -165,7 +165,7 @@ contract AirswapMinter {
         }
 
         // Mark user as having minted
-        hasMinted[msg.sender] = true;
+        hasMinted[msg.sender][mintableTokenId] = true;
         totalMinted += mintQuantity;
 
         // Mint the NFT to the user
@@ -184,12 +184,12 @@ contract AirswapMinter {
             address user = users[i];
 
             // Skip if user has already minted
-            if (hasMinted[user]) {
+            if (hasMinted[user][mintableTokenId]) {
                 continue;
             }
 
             // Mark user as having minted
-            hasMinted[user] = true;
+            hasMinted[user][mintableTokenId] = true;
             totalMinted += mintQuantity;
 
             // Mint the NFT to the user
@@ -282,7 +282,7 @@ contract AirswapMinter {
      * @return True if user can mint, false otherwise
      */
     function canMint(address user) external view returns (bool) {
-        if (hasMinted[user]) {
+        if (hasMinted[user][mintableTokenId]) {
             return false;
         }
 

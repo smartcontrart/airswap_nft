@@ -88,7 +88,7 @@ describe("AirswapMinter", function () {
         expect(await nft.tokenExists(0)).to.be.true;
 
         // Verify user is marked as having minted
-        expect(await minter.hasMinted(user1.address)).to.be.true;
+        expect(await minter.hasMinted(user1.address, 0)).to.be.true;
         expect(await minter.totalMinted()).to.equal(1);
       });
 
@@ -224,6 +224,35 @@ describe("AirswapMinter", function () {
           .to.emit(minter, "NFTMinted")
           .withArgs(user1.address, 0, 1);
       });
+
+      it("Should allow users to mint different token IDs after changing mintableTokenId", async function () {
+        const { nft, sastToken, minter, owner, user1 } = await loadFixture(
+          deployMinterFixture
+        );
+        const requiredBalance = await minter.requiredSASTBalance();
+
+        // Give user1 sufficient sAST balance
+        await sastToken.mint(user1.address, requiredBalance);
+
+        // User1 mints token 0 (default)
+        await minter.connect(user1).mintNFT();
+        expect(await nft.balanceOf(user1.address, 0)).to.equal(1);
+        expect(await minter.hasMinted(user1.address, 0)).to.be.true;
+
+        // Owner changes mintable token ID to 1
+        await minter.connect(owner).updateMintableTokenId(1);
+
+        // User1 should be able to mint token 1 (different from token 0)
+        expect(await minter.canMint(user1.address)).to.be.true;
+
+        await minter.connect(user1).mintNFT();
+        expect(await nft.balanceOf(user1.address, 1)).to.equal(1);
+        expect(await minter.hasMinted(user1.address, 1)).to.be.true;
+
+        // User1 should not be able to mint token 0 again
+        await minter.connect(owner).updateMintableTokenId(0);
+        expect(await minter.canMint(user1.address)).to.be.false;
+      });
     });
   });
 
@@ -279,8 +308,8 @@ describe("AirswapMinter", function () {
         .withArgs(user2.address, 0, 1);
 
       // Verify only user2 got the new NFT
-      expect(await minter.hasMinted(user1.address)).to.be.true;
-      expect(await minter.hasMinted(user2.address)).to.be.true;
+      expect(await minter.hasMinted(user1.address, 0)).to.be.true;
+      expect(await minter.hasMinted(user2.address, 0)).to.be.true;
       expect(await minter.totalMinted()).to.equal(2);
     });
 
